@@ -30,7 +30,7 @@ public class RssCrawlerService {
 
     private final NewsRepository newsRepository;
 
-    // 3 Kategoriye Ait Zengin Haber Kaynakları
+    // Güncellenmiş ve Stabilize Edilmiş Global Kaynak Listesi
     private final List<String> rssFeeds = List.of(
             // Savunma Sanayi
             "https://www.defensenews.com/arc/outboundfeeds/rss/",
@@ -52,12 +52,12 @@ public class RssCrawlerService {
                 URL url = new URL(feedUrl);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-                // 🛡️ MANTIKLI BYPASS: "Ben Feedly RSS Okuyucu Sunucusuyum, Haberleri Çekmeye Geldim"
+                // 🛡️ WAF BYPASS: RSS Okuyucu Sunucusu Kamuflajı
                 connection.setRequestProperty("User-Agent", "Feedly/1.0 (+http://www.feedly.com/fetcher.html; like FeedFetcher-Google)");
                 connection.setRequestProperty("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml");
                 connection.setRequestProperty("Cache-Control", "no-cache");
 
-                // Bağlantı sürelerini esnettik (20 Saniye)
+                // Zaman Aşımı Toleransları (20 Saniye)
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(20000);
                 connection.connect();
@@ -77,7 +77,7 @@ public class RssCrawlerService {
                             news.setSummary(entry.getDescription().getValue());
                         }
 
-                        // Resmi bulmak için alt metoda gidiyoruz
+                        // Gelişmiş Görsel Ayıklama Motoru
                         news.setImageUrl(extractImageUrl(entry, entry.getLink()));
 
                         // Gizli/Boş Tarih (Null) Tuzağını Engelleme
@@ -88,11 +88,11 @@ public class RssCrawlerService {
                             news.setPublishedDate(LocalDateTime.now());
                         }
 
-                        // Kategori ve Dil Etiketleme Mantığı
-                        if (feedUrl.contains("artificial-intelligence") || feedUrl.contains("artificialintelligence")) {
+                        // Yeni Linklere Göre Kategori ve Dil Algoritması
+                        if (feedUrl.contains("wired") || feedUrl.contains("mit.edu") || feedUrl.contains("techcrunch")) {
                             news.setCategory("Yapay Zeka");
                             news.setLanguage("en");
-                        } else if (feedUrl.contains("techcrunch") || feedUrl.contains("verge") || feedUrl.contains("shiftdelete")) {
+                        } else if (feedUrl.contains("verge") || feedUrl.contains("shiftdelete")) {
                             news.setCategory("Teknoloji");
                             news.setLanguage(feedUrl.contains("shiftdelete") ? "tr" : "en");
                         } else {
@@ -128,7 +128,7 @@ public class RssCrawlerService {
             }
         }
 
-        // İhtimal 3: WordPress stili <content:encoded> içine gömülü resimler
+        // İhtimal 3: <content:encoded> içine gömülü resimler
         Pattern pattern = Pattern.compile("<img[^>]+src\\s*=\\s*['\"]([^'\"]+)['\"][^>]*>");
         if (entry.getContents() != null && !entry.getContents().isEmpty()) {
             for (SyndContent content : entry.getContents()) {
@@ -139,13 +139,13 @@ public class RssCrawlerService {
             }
         }
 
-        // İhtimal 4: Açıklama (<description>) içine gömülmüş HTML <img>
+        // İhtimal 4: <description> içine gömülmüş HTML <img>
         if (entry.getDescription() != null && entry.getDescription().getValue() != null) {
             Matcher matcher = pattern.matcher(entry.getDescription().getValue());
             if (matcher.find()) return matcher.group(1);
         }
 
-        // NÜKLEER SEÇENEK: JSOUP İLE WEB KAZIMA (Feedly Zırhlı)
+        // İhtimal 5: JSoup ile Orijinal Sayfayı Kazıma (Feedly Zırhı ile)
         try {
             Document doc = Jsoup.connect(articleUrl)
                     .userAgent("Feedly/1.0 (+http://www.feedly.com/fetcher.html; like FeedFetcher-Google)")
@@ -160,7 +160,7 @@ public class RssCrawlerService {
             log.warn("Web scraping başarısız oldu (Timeout veya Engel): {}", articleUrl);
         }
 
-        // En Kötü Senaryo: Güvenlik Ağı (Yer Tutucu Görsel)
+        // Güvenlik Ağı (Varsayılan Görsel)
         return "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop";
     }
 }
