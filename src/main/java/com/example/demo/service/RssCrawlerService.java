@@ -30,29 +30,33 @@ public class RssCrawlerService {
 
     private final NewsRepository newsRepository;
 
+    // 3 Kategoriye Ait Zengin Haber Kaynakları
     private final List<String> rssFeeds = List.of(
+            // Savunma Sanayi
             "https://www.defensenews.com/arc/outboundfeeds/rss/",
             "https://www.savunmasanayist.com/feed/",
+            // Yapay Zeka
             "https://techcrunch.com/category/artificial-intelligence/feed/",
             "https://artificialintelligence-news.com/feed/",
+            // Teknoloji
             "https://www.theverge.com/tech/rss/index.xml",
             "https://shiftdelete.net/feed"
     );
 
     public void fetchNewsFromFeeds() {
-        log.info("Googlebot Zırhlı Haber & Web Kazıma motoru çalıştırıldı...");
+        log.info("Feedly Zırhlı Haber & Web Kazıma motoru çalıştırıldı...");
 
         for (String feedUrl : rssFeeds) {
             try {
-                // Proxy'yi kaldırdık, doğrudan hedefe gidiyoruz
                 URL url = new URL(feedUrl);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-                // 🛡️ CLOUDFLARE BYPASS TAKTİĞİ: Resmi Googlebot Kamuflajı
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
-                connection.setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml, */*");
+                // 🛡️ MANTIKLI BYPASS: "Ben Feedly RSS Okuyucu Sunucusuyum, Haberleri Çekmeye Geldim"
+                connection.setRequestProperty("User-Agent", "Feedly/1.0 (+http://www.feedly.com/fetcher.html; like FeedFetcher-Google)");
+                connection.setRequestProperty("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml");
+                connection.setRequestProperty("Cache-Control", "no-cache");
 
-                // Bağlantı sürelerini daha da esnettik (20 Saniye)
+                // Bağlantı sürelerini esnettik (20 Saniye)
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(20000);
                 connection.connect();
@@ -72,8 +76,10 @@ public class RssCrawlerService {
                             news.setSummary(entry.getDescription().getValue());
                         }
 
+                        // Resmi bulmak için alt metoda gidiyoruz
                         news.setImageUrl(extractImageUrl(entry, entry.getLink()));
 
+                        // Gizli/Boş Tarih (Null) Tuzağını Engelleme
                         Date publishedDate = entry.getPublishedDate();
                         if (publishedDate != null) {
                             news.setPublishedDate(publishedDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
@@ -81,6 +87,7 @@ public class RssCrawlerService {
                             news.setPublishedDate(LocalDateTime.now());
                         }
 
+                        // Kategori ve Dil Etiketleme Mantığı
                         if (feedUrl.contains("artificial-intelligence") || feedUrl.contains("artificialintelligence")) {
                             news.setCategory("Yapay Zeka");
                             news.setLanguage("en");
@@ -105,9 +112,12 @@ public class RssCrawlerService {
     }
 
     private String extractImageUrl(SyndEntry entry, String articleUrl) {
+        // İhtimal 1: Standart <enclosure>
         if (entry.getEnclosures() != null && !entry.getEnclosures().isEmpty()) {
             return entry.getEnclosures().get(0).getUrl();
         }
+
+        // İhtimal 2: <media:content> veya <media:thumbnail>
         if (entry.getForeignMarkup() != null) {
             for (Element element : entry.getForeignMarkup()) {
                 if ("content".equals(element.getName()) || "thumbnail".equals(element.getName())) {
@@ -116,6 +126,8 @@ public class RssCrawlerService {
                 }
             }
         }
+
+        // İhtimal 3: WordPress stili <content:encoded> içine gömülü resimler
         Pattern pattern = Pattern.compile("<img[^>]+src\\s*=\\s*['\"]([^'\"]+)['\"][^>]*>");
         if (entry.getContents() != null && !entry.getContents().isEmpty()) {
             for (SyndContent content : entry.getContents()) {
@@ -125,15 +137,18 @@ public class RssCrawlerService {
                 }
             }
         }
+
+        // İhtimal 4: Açıklama (<description>) içine gömülmüş HTML <img>
         if (entry.getDescription() != null && entry.getDescription().getValue() != null) {
             Matcher matcher = pattern.matcher(entry.getDescription().getValue());
             if (matcher.find()) return matcher.group(1);
         }
 
-        // JSoup kazıyıcısına da Googlebot zırhını giydirdik ve proxy'yi kaldırdık
+        // NÜKLEER SEÇENEK: JSOUP İLE WEB KAZIMA (Feedly Zırhlı)
         try {
             Document doc = Jsoup.connect(articleUrl)
-                    .userAgent("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
+                    .userAgent("Feedly/1.0 (+http://www.feedly.com/fetcher.html; like FeedFetcher-Google)")
+                    .header("Accept", "text/html,application/xhtml+xml")
                     .timeout(15000)
                     .get();
             org.jsoup.nodes.Element ogImage = doc.select("meta[property=og:image]").first();
@@ -144,6 +159,7 @@ public class RssCrawlerService {
             log.warn("Web scraping başarısız oldu (Timeout veya Engel): {}", articleUrl);
         }
 
+        // En Kötü Senaryo: Güvenlik Ağı (Yer Tutucu Görsel)
         return "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop";
     }
 }
