@@ -10,7 +10,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/news")
 // Sadece kendi bilgisayarından ve ileride kuracağın Vercel sitesinden gelen isteklere izin ver
-@CrossOrigin(origins = {"http://localhost:5173", "https://senin-siten.vercel.app"})@RequiredArgsConstructor
+@CrossOrigin(origins = {"http://localhost:5173", "https://defense-news-frontend.vercel.app/"})@RequiredArgsConstructor
 public class NewsController {
 
     private final NewsRepository newsRepository;
