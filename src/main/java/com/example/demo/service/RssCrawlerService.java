@@ -37,7 +37,8 @@ public class RssCrawlerService {
             "https://www.savunmasanayist.com/feed/",
             // Yapay Zeka
             "https://techcrunch.com/category/artificial-intelligence/feed/",
-            "https://artificialintelligence-news.com/feed/",
+            "https://www.wired.com/feed/category/ai/latest/rss",
+            "https://news.mit.edu/rss/topic/artificial-intelligence2",
             // Teknoloji
             "https://www.theverge.com/tech/rss/index.xml",
             "https://shiftdelete.net/feed"
