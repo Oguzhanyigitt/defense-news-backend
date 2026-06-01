@@ -1,6 +1,5 @@
 package com.example.demo.service;
 
-import java.net.HttpURLConnection;
 import com.example.demo.entity.News;
 import com.example.demo.repository.NewsRepository;
 import com.rometools.rome.feed.synd.SyndContent;
@@ -15,7 +14,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
@@ -29,7 +30,6 @@ public class RssCrawlerService {
 
     private final NewsRepository newsRepository;
 
-    // 3 Kategoriye Ait Zengin Haber Kaynakları
     private final List<String> rssFeeds = List.of(
             // Savunma Sanayi
             "https://www.defensenews.com/arc/outboundfeeds/rss/",
@@ -43,20 +43,21 @@ public class RssCrawlerService {
     );
 
     public void fetchNewsFromFeeds() {
-        log.info("Gelişmiş Haber & Web Kazıma motoru çalıştırıldı...");
+        log.info("Zırhlı Haber & Web Kazıma motoru çalıştırıldı...");
 
         for (String feedUrl : rssFeeds) {
             try {
-                // Import kısmına şunu eklemeyi unutma: import java.net.HttpURLConnection;
-
                 URL url = new URL(feedUrl);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-// Sunucuya "Ben bir bot değilim, Windows kullanan bir Google Chrome tarayıcısıyım" diyoruz
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                connection.setRequestProperty("Accept", "application/rss+xml, text/xml, */*");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
+                // 1. ÇÖZÜM: Gelişmiş Kimlik Gizleme (Spoofing) ve Dil Başlıkları
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+                connection.setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml, */*");
+                connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9,tr;q=0.8");
+
+                // 2. ÇÖZÜM: Zaman Aşımı (Timeout) Toleransını 5 sn'den 15 sn'ye Çıkardık
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(15000);
                 connection.connect();
 
                 SyndFeedInput input = new SyndFeedInput();
@@ -74,15 +75,17 @@ public class RssCrawlerService {
                             news.setSummary(entry.getDescription().getValue());
                         }
 
-                        // Web Kazıyıcı (JSoup) Destekli Görsel Motoru
                         news.setImageUrl(extractImageUrl(entry, entry.getLink()));
 
+                        // 3. ÇÖZÜM: GİZLİ TARİH (NULL) TUZAĞINI ENGELLEME
                         Date publishedDate = entry.getPublishedDate();
                         if (publishedDate != null) {
                             news.setPublishedDate(publishedDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                        } else {
+                            // Eğer kaynak site tarih koymayı unutmuşsa, kaybolmasın diye ona o anın tarihini veriyoruz.
+                            news.setPublishedDate(LocalDateTime.now());
                         }
 
-                        // KATEGORİLEME MANTIĞI
                         if (feedUrl.contains("artificial-intelligence") || feedUrl.contains("artificialintelligence")) {
                             news.setCategory("Yapay Zeka");
                             news.setLanguage("en");
@@ -107,7 +110,6 @@ public class RssCrawlerService {
     }
 
     private String extractImageUrl(SyndEntry entry, String articleUrl) {
-        // Hızlı Yöntemler (RSS İçi)
         if (entry.getEnclosures() != null && !entry.getEnclosures().isEmpty()) {
             return entry.getEnclosures().get(0).getUrl();
         }
@@ -133,18 +135,20 @@ public class RssCrawlerService {
             if (matcher.find()) return matcher.group(1);
         }
 
-        // NÜKLEER SEÇENEK: JSOUP İLE WEB KAZIMA (Eğer RSS'te resim hiç yoksa habere bağlanıp kapağı al)
         try {
-            Document doc = Jsoup.connect(articleUrl).userAgent("Mozilla/5.0").timeout(5000).get();
+            // JSoup için de Timeout süresini 10 saniyeye çıkardık
+            Document doc = Jsoup.connect(articleUrl)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .timeout(10000)
+                    .get();
             org.jsoup.nodes.Element ogImage = doc.select("meta[property=og:image]").first();
             if (ogImage != null) {
                 return ogImage.attr("content");
             }
         } catch (Exception e) {
-            log.warn("Web scraping başarısız oldu (Zaman aşımı veya engel): {}", articleUrl);
+            // Timeout olursa projeyi durdurma, varsayılan resme geç
         }
 
-        // En Kötü Senaryo
         return "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop";
     }
 }
