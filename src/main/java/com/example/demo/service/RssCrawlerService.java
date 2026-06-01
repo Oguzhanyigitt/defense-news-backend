@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -30,6 +32,7 @@ public class RssCrawlerService {
 
     private final NewsRepository newsRepository;
 
+    // 3 Kategoriye Ait Zengin Haber Kaynakları
     private final List<String> rssFeeds = List.of(
             // Savunma Sanayi
             "https://www.defensenews.com/arc/outboundfeeds/rss/",
@@ -43,19 +46,23 @@ public class RssCrawlerService {
     );
 
     public void fetchNewsFromFeeds() {
-        log.info("Zırhlı Haber & Web Kazıma motoru çalıştırıldı...");
+        log.info("Proxy Zırhlı Haber & Web Kazıma motoru çalıştırıldı...");
 
         for (String feedUrl : rssFeeds) {
             try {
-                URL url = new URL(feedUrl);
+                // CLOUDFLARE BYPASS: Sunucu IP'mizi gizlemek için AllOrigins Proxy kullanıyoruz
+                String encodedUrl = URLEncoder.encode(feedUrl, StandardCharsets.UTF_8.toString());
+                String bypassUrl = "https://api.allorigins.win/raw?url=" + encodedUrl;
+
+                URL url = new URL(bypassUrl);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-                // 1. ÇÖZÜM: Gelişmiş Kimlik Gizleme (Spoofing) ve Dil Başlıkları
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+                // Kimlik Gizleme (Spoofing) Başlıkları
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
                 connection.setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml, */*");
                 connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9,tr;q=0.8");
 
-                // 2. ÇÖZÜM: Zaman Aşımı (Timeout) Toleransını 5 sn'den 15 sn'ye Çıkardık
+                // Zaman Aşımı (Timeout) Toleransları
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(15000);
                 connection.connect();
@@ -75,17 +82,18 @@ public class RssCrawlerService {
                             news.setSummary(entry.getDescription().getValue());
                         }
 
+                        // Gelişmiş Görsel Ayıklama Motoru (Proxy destekli)
                         news.setImageUrl(extractImageUrl(entry, entry.getLink()));
 
-                        // 3. ÇÖZÜM: GİZLİ TARİH (NULL) TUZAĞINI ENGELLEME
+                        // Gizli/Boş Tarih (Null) Tuzağını Engelleme
                         Date publishedDate = entry.getPublishedDate();
                         if (publishedDate != null) {
                             news.setPublishedDate(publishedDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                         } else {
-                            // Eğer kaynak site tarih koymayı unutmuşsa, kaybolmasın diye ona o anın tarihini veriyoruz.
                             news.setPublishedDate(LocalDateTime.now());
                         }
 
+                        // Kategori ve Dil Etiketleme Mantığı
                         if (feedUrl.contains("artificial-intelligence") || feedUrl.contains("artificialintelligence")) {
                             news.setCategory("Yapay Zeka");
                             news.setLanguage("en");
@@ -110,9 +118,12 @@ public class RssCrawlerService {
     }
 
     private String extractImageUrl(SyndEntry entry, String articleUrl) {
+        // İhtimal 1: Standart <enclosure>
         if (entry.getEnclosures() != null && !entry.getEnclosures().isEmpty()) {
             return entry.getEnclosures().get(0).getUrl();
         }
+
+        // İhtimal 2: <media:content> veya <media:thumbnail>
         if (entry.getForeignMarkup() != null) {
             for (Element element : entry.getForeignMarkup()) {
                 if ("content".equals(element.getName()) || "thumbnail".equals(element.getName())) {
@@ -121,6 +132,8 @@ public class RssCrawlerService {
                 }
             }
         }
+
+        // İhtimal 3: WordPress stili <content:encoded> içine gömülü resimler
         Pattern pattern = Pattern.compile("<img[^>]+src\\s*=\\s*['\"]([^'\"]+)['\"][^>]*>");
         if (entry.getContents() != null && !entry.getContents().isEmpty()) {
             for (SyndContent content : entry.getContents()) {
@@ -130,14 +143,19 @@ public class RssCrawlerService {
                 }
             }
         }
+
+        // İhtimal 4: Açıklama (<description>) içine gömülmüş HTML <img>
         if (entry.getDescription() != null && entry.getDescription().getValue() != null) {
             Matcher matcher = pattern.matcher(entry.getDescription().getValue());
             if (matcher.find()) return matcher.group(1);
         }
 
+        // NÜKLEER SEÇENEK: JSOUP İLE WEB KAZIMA (Cloudflare engeline takılmamak için Proxy Üzerinden)
         try {
-            // JSoup için de Timeout süresini 10 saniyeye çıkardık
-            Document doc = Jsoup.connect(articleUrl)
+            String encodedArticleUrl = URLEncoder.encode(articleUrl, StandardCharsets.UTF_8.toString());
+            String proxyArticleUrl = "https://api.allorigins.win/raw?url=" + encodedArticleUrl;
+
+            Document doc = Jsoup.connect(proxyArticleUrl)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .timeout(10000)
                     .get();
@@ -146,9 +164,10 @@ public class RssCrawlerService {
                 return ogImage.attr("content");
             }
         } catch (Exception e) {
-            // Timeout olursa projeyi durdurma, varsayılan resme geç
+            log.warn("Web scraping başarısız oldu (Timeout veya Engel): {}", articleUrl);
         }
 
+        // En Kötü Senaryo: Güvenlik Ağı (Yer Tutucu Görsel)
         return "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop";
     }
 }
